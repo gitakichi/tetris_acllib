@@ -82,7 +82,7 @@ ACL_Color g_brushColor = BLACK;
 int g_brushStyle = BRUSH_STYLE_SOLID;
 
 HFONT g_font = NULL;
-char g_fontName[256] = "test-bug";
+char g_fontName[256] = "Times New Roman";
 int g_textSize = 12;
 ACL_Color g_textColor = BLACK;
 ACL_Color g_textBkColor = WHITE;
@@ -98,6 +98,7 @@ KeyboardEventCallback g_keyboard = NULL;
 MouseEventCallback g_mouse = NULL;
 TimerEventCallback g_timer = NULL;
 CharEventCallback g_char = NULL;
+CloseEventCallback g_close = NULL;
 
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 
@@ -279,6 +280,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 		break;
 
 	case WM_DESTROY:
+		g_close();
 		DeleteObject(g_hbitmap);
 		PostQuitMessage(0);
 		break;
@@ -808,6 +810,12 @@ void cancelTimer(int id)
 {
 	KillTimer(g_hWnd, id);
 }
+
+void registerCloseEvent(CloseEventCallback callback)
+{
+	g_close = callback;
+}
+
 
 void loadSound(const char *fileName,ACL_Sound *pSound)
 {

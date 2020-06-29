@@ -32,10 +32,10 @@ int Setup(void);
 int putblock(int origin_x,int origin_y,int x, int y,char color);
 int blankscan(int x,int y,char mod[][TMP_W]);
 int putmodule(int x,int y,char mod[][TMP_W]);
-int ext_putmodule(int x,int y,char mod[][TMP_W]);
+int ext_putmodule(int x,int y,char mod[][TMP_W],char *str);
 int copymodule(char from_mod[][TMP_W],char to_mod[][TMP_W]);
 int swapmodule(char from_mod[][TMP_W],char to_mod[][TMP_W]);
-int randmodule(char to_mod[][TMP_W]);
+int randmodule(char to_mod[][TMP_W],int res);
 int flash(char *flash_q);
 int find_line(char *flash_q);//TBD
 int blink_line(char *flash_q);//TBD
@@ -48,11 +48,23 @@ int game2vram(int x0,int y0,int x1,int y1);
 int res_game(void);
 int movefunc(int delta_x,int delta_y,char tmp_table[][TMP_W]);
 int dropfunc(void);
+void CloseEvent(void);
+
+unsigned char table[7][TMP_W]={
+		{0x00,0x08,0x0E,0x00,0x00},
+		{0x00,0x06,0x0C,0x00,0x00},
+		{0x00,0x00,0x1E,0x00,0x00},
+		{0x00,0x0C,0x06,0x00,0x00},
+		{0x00,0x04,0x0E,0x00,0x00},
+		{0x00,0x06,0x06,0x00,0x00},
+		{0x00,0x02,0x0E,0x00,0x00}
+};
 
 char **game_table,**view_table,*game_table_base,*view_table_base;
-char tmp_table[TMP_W][TMP_W],rot_table[TMP_W][TMP_W],hold_table[TMP_W][TMP_W],flash_q[32];
-int x = 5,y = 0, status = 0,score = 0,tar_en = 1,line_n = 0,hold_status = 0,timerID = 0;
+char tmp_table[TMP_W][TMP_W],hold_table[TMP_W][TMP_W],flash_q[32];
+int x,y,hold_status,sum_line,status = 0,score = 0,tar_en = 1,line_n = 0,timerID = 0;
 
+char blank_table[TMP_W][TMP_W] = {{0,0,0,0,0},{0,0,0,0,0},{0,0,0,0,0},{0,0,0,0,0},{0,0,0,0,0}};
 
 void KeyboardEvent(int key, int event)
 {
@@ -75,43 +87,24 @@ void KeyboardEvent(int key, int event)
 				if(line_n == 0)	status = FLASH_STATUS;
 				else			status = BLINK_STATUS;
 			}
-	else if(status == FLASH_STATUS){
-			}
+			else if(key == 113)	closeWindow();//F2
 			else if(key == 'H'){//while flash dont use hold		
 				if(hold_status == 0){
 					//swap
 					copymodule(tmp_table,hold_table);
-					randmodule(tmp_table);
+					randmodule(tmp_table,0);
 					hold_status = 2;
 				}
 				else if(hold_status == 2 && blankscan(x,y,hold_table) == 0){
 					swapmodule(tmp_table,hold_table);
 					hold_status = 3;
 				}
-					
-				//view hold_table
-				beginPaint();
-				setTextColor(BLACK);
-				setTextBkColor(WHITE);
-				setTextSize(20);
-				paintText(180, 100, "Hold Block");
-				
-				ext_putmodule(180,0,hold_table);
-				endPaint();
+				ext_putmodule(180,0,hold_table,"Hold Block");
 			}
 			else if(key == 27)	status = PAUSE_STATUS;//pause
-			else if(key == 112){//F1
-				if(tar_en == 1)	tar_en = 0;
-				else			tar_en = 1;
-			}
+			else if(key == 112)	tar_en = tar_en ^ 0x01;//F1
 		}
 		else if(key == 113){//F2
-			free(game_table_base);
-			free(game_table);
-
-			free(view_table_base);
-			free(view_table);
-			
 			closeWindow();
 		}
 		else if(status == PAUSE_STATUS && key == 27){
@@ -119,12 +112,15 @@ void KeyboardEvent(int key, int event)
 		}
 		else if((status == BOOT_STATUS || status == GAMEOVER_STATUS) && key == 'P'){//start
 			status = PLAY_STATUS;
-			randmodule(tmp_table);
+			randmodule(tmp_table,1);
 			//reset x and y data
 			x = 5;
 			y = 0;
 			score = 0;
+			sum_line = 0;
+			hold_status = 0;
 
+			ext_putmodule(180,0,blank_table,"Hold Block");
 			res_game();
 			game2vram(0,0,VIEW_X1,VIEW_Y1);//reset vram
 			vram2module(x,y,tmp_table);
@@ -168,11 +164,12 @@ void timerEvent(int id)
 			default:
 				break;
 		}
+		sum_line += line_n;
 
 		flash(flash_q);
 		putview(0,0,VIEW_X1,VIEW_Y1);
 
-		randmodule(tmp_table);
+		randmodule(tmp_table,0);
 		//reset x and y data
 		x = 5;
 		y = 0;
@@ -216,6 +213,8 @@ int Setup(void)
 	registerKeyboardEvent(KeyboardEvent);
 	registerTimerEvent(timerEvent);
 	startTimer(timerID, 500);//TBD
+
+	registerCloseEvent(CloseEvent);
 
 	beginPaint();
 	setTextColor(BLACK);
@@ -316,13 +315,21 @@ int putmodule(int x,int y,char mod[][TMP_W])
 	return 0;
 }
 
-int ext_putmodule(int x,int y,char mod[][TMP_W])
+int ext_putmodule(int x,int y,char mod[][TMP_W],char *str)
 {
+	beginPaint();
+	setTextColor(BLACK);
+	setTextBkColor(WHITE);
+	setTextSize(20);
+	paintText(x, y+100, str);
+	
 	for(int i = 0;i < TMP_W;i++){
 		for(int j = 0;j < TMP_W;j++){
 			putblock(x,y,j,i,mod[i][j]);
 		}
 	}
+
+	endPaint();
 
 	return 0;
 }
@@ -354,34 +361,23 @@ int swapmodule(char from_mod[][TMP_W],char to_mod[][TMP_W])
 	return 0;
 }
 
-int randmodule(char to_mod[][TMP_W])
+int randmodule(char to_mod[][TMP_W],int res)
 {
-	static int boot = 0;
-	static char que[3];
-	static char *qp = &que[0];
+	static char que[4];
+	static int k = 0;
+	char mod;
+	char nxt_mod[TMP_W][TMP_W];
+	char str[][16]={"Next Block 1","Next Block 2","Next Block 3"};
 
-	char mod;// = rand() % 7;
-	
-	unsigned char table[7][TMP_W]={
-		{0x00,0x08,0x0E,0x00,0x00},
-		{0x00,0x06,0x0C,0x00,0x00},
-		{0x00,0x00,0x1E,0x00,0x00},
-		{0x00,0x0C,0x06,0x00,0x00},
-		{0x00,0x04,0x0E,0x00,0x00},
-		{0x00,0x06,0x06,0x00,0x00},
-		{0x00,0x02,0x0E,0x00,0x00}
-	};
-
-	if(boot == 0){
+	if(res == 1){
 		que[0] = rand() % 7;
 		que[1] = rand() % 7;
 		que[2] = rand() % 7;
-
-		boot = 1;
+		que[3] = rand() % 7;
 	}
-	mod = *qp;
-	*qp = rand() % 7;
 	
+	mod = que[k];
+	que[k] = rand() % 7;
 
 	for(int i = 0;i < TMP_W;i++){
 		if(table[mod][i] & 0x10)	to_mod[i][0] = mod+1;
@@ -400,33 +396,29 @@ int randmodule(char to_mod[][TMP_W])
 		else						to_mod[i][4] = 0;
 	}		
 
-	if(qp - &que[0] == 2)	qp = &que[0];
-	else qp++;
+	if(k == 3)	k = 0;
+	else k++;
 
-	beginPaint();
-	setTextColor(BLACK);
-	setTextBkColor(WHITE);
-	setTextSize(20);
-	paintText(560, 100, "Next Block");
-	
-	for(int i = 0;i < TMP_W;i++){
-		if(table[*qp][i] & 0x10)	putblock(560,0,0,i,(*qp)+1);
-		else						putblock(560,0,0,i,0);
-	
-		if(table[*qp][i] & 0x08)	putblock(560,0,1,i,(*qp)+1);
-		else						putblock(560,0,1,i,0);
-		
-		if(table[*qp][i] & 0x04)	putblock(560,0,2,i,(*qp)+1);
-		else						putblock(560,0,2,i,0);
-		
-		if(table[*qp][i] & 0x02)	putblock(560,0,3,i,(*qp)+1);
-		else						putblock(560,0,3,i,0);
-		
-		if(table[*qp][i] & 0x01)	putblock(560,0,4,i,(*qp)+1);
-		else						putblock(560,0,4,i,0);
+	for(int m = 0;m <= 2;m++){
+		for(int i = 0;i < TMP_W;i++){
+			if(table[que[0x03&(k+m)]][i] & 0x10)	nxt_mod[i][0] = que[0x03&(k+m)]+1;
+			else									nxt_mod[i][0] = 0;
+
+			if(table[que[0x03&(k+m)]][i] & 0x08)	nxt_mod[i][1] = que[0x03&(k+m)]+1;
+			else									nxt_mod[i][1] = 0;
+
+			if(table[que[0x03&(k+m)]][i] & 0x04)	nxt_mod[i][2] = que[0x03&(k+m)]+1;
+			else									nxt_mod[i][2] = 0;
+
+			if(table[que[0x03&(k+m)]][i] & 0x02)	nxt_mod[i][3] = que[0x03&(k+m)]+1;
+			else									nxt_mod[i][3] = 0;
+
+			if(table[que[0x03&(k+m)]][i] & 0x01)	nxt_mod[i][4] = que[0x03&(k+m)]+1;
+			else									nxt_mod[i][4] = 0;
+
+			ext_putmodule(560,m*120,nxt_mod,str[m]);
+		}
 	}
-	endPaint();
-
 
 	return 0;
 }
@@ -502,8 +494,10 @@ int putview(int x0,int y0,int x1,int y1)
 	setTextColor(BLACK);
 	setTextBkColor(WHITE);
 	setTextSize(30);
-	sprintf_s(str,16,"score:%d",score);
-	paintText(70, 200, str);		
+	sprintf_s(str,16,"Score:%d",score);
+	paintText(70, 200, str);
+	sprintf_s(str,16,"Level:%d",sum_line/10);
+	paintText(70, 230, str);
 
 	endPaint();
 
@@ -512,6 +506,8 @@ int putview(int x0,int y0,int x1,int y1)
 
 int cwfunc(void)
 {
+	char rot_table[TMP_W][TMP_W];
+	
 	for(int i = 0;i < TMP_W;i++){
 		for(int j = 0;j < TMP_W;j++){
 			rot_table[i][j] = tmp_table[4-j][i];
@@ -530,6 +526,8 @@ int cwfunc(void)
 
 int ccwfunc(void)
 {
+	char rot_table[TMP_W][TMP_W];
+	
 	for(int i = 0;i < TMP_W;i++){
 		for(int j = 0;j < TMP_W;j++){
 			rot_table[i][j] = tmp_table[j][4-i];
@@ -662,4 +660,13 @@ int dropfunc(void)
 	if(hold_status == 3) hold_status = 2;
 
 	return result;
+}
+
+void CloseEvent(void)//(int result)
+{
+	free(game_table_base);
+	free(game_table);
+
+	free(view_table_base);
+	free(view_table);
 }
