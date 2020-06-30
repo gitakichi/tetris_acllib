@@ -25,7 +25,6 @@
 #define SIDEWALL			0x1002
 #define	UNDERWALL			0x1FFE
 
-
 void KeyboardEvent(int key, int event);
 void timerEvent(int id);
 int Setup(void);
@@ -64,7 +63,6 @@ unsigned char table[7][TMP_W]={
 char **game_table,**view_table,*game_table_base,*view_table_base;
 char tmp_table[TMP_W][TMP_W],hold_table[TMP_W][TMP_W],flash_q[32];
 int x,y,hold_status,sum_line,status = 0,score = 0,tar_en = 1,line_n = 0,timerID = 0,div_n,div_i = 0,level = 0;
-
 char blank_table[TMP_W][TMP_W] = {{0,0,0,0,0},{0,0,0,0,0},{0,0,0,0,0},{0,0,0,0,0},{0,0,0,0,0}};
 
 void KeyboardEvent(int key, int event)
@@ -309,9 +307,7 @@ void randmodule(char to_mod[][TMP_W],int res)
 {
 	static char que[4];
 	static int k = 0;
-	char mod;
-	char nxt_mod[TMP_W][TMP_W];
-	char str[][16]={"Next Block 1","Next Block 2","Next Block 3"};
+	char mod,nxt_mod[TMP_W][TMP_W],str[][16]={"Next Block 1","Next Block 2","Next Block 3"};
 
 	if(res == 1){
 		que[0] = rand() % 7;
@@ -367,11 +363,11 @@ void randmodule(char to_mod[][TMP_W],int res)
 
 int find_line(char *flash_q)
 {
-	int det = 0;
+	int det = 0,k;
 	char *qp = flash_q;
 
 	for(int i = GAME_Y0;i <= GAME_Y1;i++){
-		int k=0;
+		k = 0;
 		for(int j = GAME_X0;j <= GAME_X1;j++){
 			if(game_table[i][j] != 0)	k++;
 		}
@@ -406,13 +402,11 @@ void putview(void)
 	char str[16];
 
 	beginPaint();
-
 	for(int i = 0;i <= VIEW_Y1;i++){
 		for(int j = 0;j <= VIEW_X1;j++){
 			putblock(LEFT,0,j,i,view_table[i][j]);
 		}
 	}
-
 	setTextColor(BLACK);
 	setTextBkColor(WHITE);
 	setTextSize(30);
@@ -457,15 +451,12 @@ void vram2module(int x,int y,char tmp_table[][TMP_W])
 
 void vram2target(int x,int y,char tmp_table[][TMP_W],int tar_en)
 {
-	int x_tar,y_tar;
-	
-	x_tar = x;
-	y_tar = y;
+	int x_tar = x;
+	int y_tar = y;
 
 	while(blankscan(x_tar,(y_tar)+1,tmp_table) == 0){
 		(y_tar)++;
 	}
-
 	for(int i = 0;i < TMP_W;i++){
 		for(int j = 0;j < TMP_W;j++){
 			if((y_tar - y) > 3 && tar_en == 1 && tmp_table[i][j] != 0){

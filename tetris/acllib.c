@@ -82,7 +82,7 @@ ACL_Color g_brushColor = BLACK;
 int g_brushStyle = BRUSH_STYLE_SOLID;
 
 HFONT g_font = NULL;
-char g_fontName[256] = "Times New Roman";
+char g_fontName[256] = "test-bug";
 int g_textSize = 12;
 ACL_Color g_textColor = BLACK;
 ACL_Color g_textBkColor = WHITE;
@@ -326,7 +326,7 @@ void initWindow(const char *wndName, int x, int y, int width, int height)
 
 void closeWindow()
 {
-	DestroyWindow(g_hWnd);//TBD
+	DestroyWindow(g_hWnd);
 }
 
 void initConsole(void)
@@ -816,7 +816,6 @@ void registerCloseEvent(CloseEventCallback callback)
 	g_close = callback;
 }
 
-
 void loadSound(const char *fileName,ACL_Sound *pSound)
 {
 	char *cmdStr;
@@ -871,4 +870,5 @@ void hideCaret()
 {
 	HideCaret(g_hWnd);
 }
+
 
