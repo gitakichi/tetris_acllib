@@ -29,26 +29,27 @@
 void KeyboardEvent(int key, int event);
 void timerEvent(int id);
 int Setup(void);
-int putblock(int origin_x,int origin_y,int x, int y,char color);
+void putblock(int origin_x,int origin_y,int x, int y,char color);
 int blankscan(int x,int y,char mod[][TMP_W]);
-int putmodule(int x,int y,char mod[][TMP_W]);
-int ext_putmodule(int x,int y,char mod[][TMP_W],char *str);
-int copymodule(char from_mod[][TMP_W],char to_mod[][TMP_W]);
-int swapmodule(char from_mod[][TMP_W],char to_mod[][TMP_W]);
-int randmodule(char to_mod[][TMP_W],int res);
-int flash(char *flash_q);
-int find_line(char *flash_q);//TBD
-int blink_line(char *flash_q);//TBD
-int putview(int x0,int y0,int x1,int y1);
-int cwfunc(void);
-int ccwfunc(void);
-int vram2module(int x,int y,char tmp_table[][TMP_W]);
-int vram2target(int x,int y,char tmp_table[][TMP_W],int tar_en);
-int game2vram(int x0,int y0,int x1,int y1);
-int res_game(void);
+void putmodule(int x,int y,char mod[][TMP_W]);
+void ext_putmodule(int x,int y,char mod[][TMP_W],char *str);
+void copymodule(char from_mod[][TMP_W],char to_mod[][TMP_W]);
+void swapmodule(char from_mod[][TMP_W],char to_mod[][TMP_W]);
+void randmodule(char to_mod[][TMP_W],int res);
+int find_line(char *flash_q);
+void blink_line(char *flash_q);
+void putview(void);
+void rotfunc(int mode);
+void vram2module(int x,int y,char tmp_table[][TMP_W]);
+void vram2target(int x,int y,char tmp_table[][TMP_W],int tar_en);
+void game2vram(void);
+void res_game(void);
 int movefunc(int delta_x,int delta_y,char tmp_table[][TMP_W]);
 int dropfunc(void);
 void CloseEvent(void);
+void gameconfig(int key);
+void flashfunc(char *flash_q);
+void holdfunc(void);
 
 unsigned char table[7][TMP_W]={
 		{0x00,0x08,0x0E,0x00,0x00},
@@ -62,7 +63,7 @@ unsigned char table[7][TMP_W]={
 
 char **game_table,**view_table,*game_table_base,*view_table_base;
 char tmp_table[TMP_W][TMP_W],hold_table[TMP_W][TMP_W],flash_q[32];
-int x,y,hold_status,sum_line,status = 0,score = 0,tar_en = 1,line_n = 0,timerID = 0;
+int x,y,hold_status,sum_line,status = 0,score = 0,tar_en = 1,line_n = 0,timerID = 0,div_n,div_i = 0,level = 0;
 
 char blank_table[TMP_W][TMP_W] = {{0,0,0,0,0},{0,0,0,0,0},{0,0,0,0,0},{0,0,0,0,0},{0,0,0,0,0}};
 
@@ -79,8 +80,8 @@ void KeyboardEvent(int key, int event)
 			if(key == 39)		movefunc(1,0,tmp_table);//right
 			else if(key == 37)	movefunc(-1,0,tmp_table);//left	
 			else if(key == 40)	movefunc(0,1,tmp_table);//down
-			else if(key == 'S')	cwfunc();
-			else if(key == 'A')	ccwfunc();
+			else if(key == 'S')	rotfunc(0);//cw
+			else if(key == 'A')	rotfunc(1);//ccw
 			else if(key == 38){//up
 				dropfunc();
 				line_n = find_line(flash_q);
@@ -89,17 +90,7 @@ void KeyboardEvent(int key, int event)
 			}
 			else if(key == 113)	closeWindow();//F2
 			else if(key == 'H'){//while flash dont use hold		
-				if(hold_status == 0){
-					//swap
-					copymodule(tmp_table,hold_table);
-					randmodule(tmp_table,0);
-					hold_status = 2;
-				}
-				else if(hold_status == 2 && blankscan(x,y,hold_table) == 0){
-					swapmodule(tmp_table,hold_table);
-					hold_status = 3;
-				}
-				ext_putmodule(180,0,hold_table,"Hold Block");
+				holdfunc();
 			}
 			else if(key == 27)	status = PAUSE_STATUS;//pause
 			else if(key == 112)	tar_en = tar_en ^ 0x01;//F1
@@ -110,22 +101,8 @@ void KeyboardEvent(int key, int event)
 		else if(status == PAUSE_STATUS && key == 27){
 			status = PLAY_STATUS;//release pause
 		}
-		else if((status == BOOT_STATUS || status == GAMEOVER_STATUS) && key == 'P'){//start
-			status = PLAY_STATUS;
-			randmodule(tmp_table,1);
-			//reset x and y data
-			x = 5;
-			y = 0;
-			score = 0;
-			sum_line = 0;
-			hold_status = 0;
-
-			ext_putmodule(180,0,blank_table,"Hold Block");
-			res_game();
-			game2vram(0,0,VIEW_X1,VIEW_Y1);//reset vram
-			vram2module(x,y,tmp_table);
-			vram2target(x,y,tmp_table,tar_en);
-			putview(0,0,VIEW_X1,VIEW_Y1);
+		else if(status == BOOT_STATUS || status == GAMEOVER_STATUS){//start
+			gameconfig(key);
 		}
 		used = 1;
 	}
@@ -142,55 +119,37 @@ void KeyboardEvent(int key, int event)
 
 void timerEvent(int id)
 {
-	if(status == BLINK_STATUS){
-		blink_line(flash_q);
-		putview(0,0,VIEW_X1,VIEW_Y1);
-		status = FLASH_STATUS;
-	}
-	else if(status == FLASH_STATUS){
-		switch(line_n){
-			case 1:
-				score += 40;
-				break;
-			case 2:
-				score += 100;
-				break;
-			case 3:
-				score += 300;
-				break;
-			case 4:
-				score += 1200;
-				break;
-			default:
-				break;
+	if(div_n <= div_i){
+		if(status == BLINK_STATUS){
+			blink_line(flash_q);
+			putview();
+			status = FLASH_STATUS;
 		}
-		sum_line += line_n;
-
-		flash(flash_q);
-		putview(0,0,VIEW_X1,VIEW_Y1);
-
-		randmodule(tmp_table,0);
-		//reset x and y data
-		x = 5;
-		y = 0;
-		if(blankscan(x,y,tmp_table) == 1)	status = GAMEOVER_STATUS; 
-		else								status = PLAY_STATUS;
-	}
-	else if(status == GAMEOVER_STATUS){
-		beginPaint();
-		setTextColor(BLACK);
-		setTextBkColor(WHITE);
-		setTextSize(30);
-		paintText(LEFT+70, 200, "GAME OVER");
-		endPaint();
-	}
-	else if(status == PLAY_STATUS){//continue game
-		if(movefunc(0,1,tmp_table) == 1){//detect ground		
-			line_n = find_line(flash_q);
-			if(line_n == 0)	status = FLASH_STATUS;
-			else			status = BLINK_STATUS;
+		else if(status == FLASH_STATUS){
+			flashfunc(flash_q);
+		}
+		else if(status == GAMEOVER_STATUS){
+			beginPaint();
+			setTextColor(BLACK);
+			setTextBkColor(WHITE);
+			setTextSize(30);
+			paintText(LEFT+70, 200, "GAME OVER");
+			endPaint();
 			
+			level = 0;
 		}
+		else if(status == PLAY_STATUS){//continue game
+			if(movefunc(0,1,tmp_table) == 1){//detect ground		
+				line_n = find_line(flash_q);
+				if(line_n == 0)	status = FLASH_STATUS;
+				else			status = BLINK_STATUS;
+			
+			}
+		}
+		div_i = 0;
+	}
+	else{
+		div_i++;
 	}
 }
 
@@ -209,11 +168,9 @@ int Setup(void)
 	}
 	
 	initWindow("Tetris", 0, 0, WIDTH, HEIGHT);
-
 	registerKeyboardEvent(KeyboardEvent);
 	registerTimerEvent(timerEvent);
-	startTimer(timerID, 500);//TBD
-
+	startTimer(timerID, 10);//TBD
 	registerCloseEvent(CloseEvent);
 
 	beginPaint();
@@ -231,16 +188,15 @@ int Setup(void)
 	endPaint();
 
 	res_game();
-	game2vram(0,0,VIEW_X1,VIEW_Y1);
-	putview(0,0,VIEW_X1,VIEW_Y1);
+	game2vram();
+	putview();
 	
 	return 0;
 }
 
 
-int putblock(int origin_x,int origin_y,int x, int y,char color)
+void putblock(int origin_x,int origin_y,int x, int y,char color)
 {
-
 	setPenWidth(2);
 	setPenColor(BLACK);
 
@@ -278,12 +234,8 @@ int putblock(int origin_x,int origin_y,int x, int y,char color)
 		break;
 	default:
 		setBrushColor(BLACK);
-		break;
 	}
-
 	rectangle(origin_x+(x*BLOCK_W),origin_y+(y*BLOCK_W) , origin_x+(x*BLOCK_W)+BLOCK_W, origin_y+(y*BLOCK_W)+BLOCK_W);
-
-	return 0;
 }
 
 
@@ -302,7 +254,7 @@ int blankscan(int x,int y,char mod[][TMP_W])
 }
 
 
-int putmodule(int x,int y,char mod[][TMP_W])
+void putmodule(int x,int y,char mod[][TMP_W])
 {
 	for(int i = 0;i < TMP_W;i++){
 		for(int j = 0;j < TMP_W;j++){
@@ -311,11 +263,9 @@ int putmodule(int x,int y,char mod[][TMP_W])
 			}
 		}
 	}
-
-	return 0;
 }
 
-int ext_putmodule(int x,int y,char mod[][TMP_W],char *str)
+void ext_putmodule(int x,int y,char mod[][TMP_W],char *str)
 {
 	beginPaint();
 	setTextColor(BLACK);
@@ -330,23 +280,19 @@ int ext_putmodule(int x,int y,char mod[][TMP_W],char *str)
 	}
 
 	endPaint();
-
-	return 0;
 }
 
 
-int copymodule(char from_mod[][TMP_W],char to_mod[][TMP_W])
+void copymodule(char from_mod[][TMP_W],char to_mod[][TMP_W])
 {
 	for(int i = 0;i < TMP_W;i++){
 		for(int j = 0;j < TMP_W;j++){
 			to_mod[i][j] = from_mod[i][j];
 		}
 	}
-
-	return 0;
 }
 
-int swapmodule(char from_mod[][TMP_W],char to_mod[][TMP_W])
+void swapmodule(char from_mod[][TMP_W],char to_mod[][TMP_W])
 {
 	char tmp;
 	
@@ -357,11 +303,9 @@ int swapmodule(char from_mod[][TMP_W],char to_mod[][TMP_W])
 			from_mod[i][j] = tmp;
 		}
 	}
-
-	return 0;
 }
 
-int randmodule(char to_mod[][TMP_W],int res)
+void randmodule(char to_mod[][TMP_W],int res)
 {
 	static char que[4];
 	static int k = 0;
@@ -419,26 +363,6 @@ int randmodule(char to_mod[][TMP_W],int res)
 			ext_putmodule(560,m*120,nxt_mod,str[m]);
 		}
 	}
-
-	return 0;
-}
-
-
-int flash(char *flash_q)
-{	
-	char *qp = flash_q;
-	
-	while(*qp != 0){
-		for(int j = GAME_X0;j <= GAME_X1;j++){
-			for(int i = *qp;i > GAME_Y0;i--){
-				game_table[i][j] = game_table[i-1][j];
-			}
-			game_table[2][j] = 0;
-		}
-		qp++;
-	}
-
-	return 0;
 }
 
 int find_line(char *flash_q)
@@ -462,7 +386,7 @@ int find_line(char *flash_q)
 	return det;
 }
 
-int blink_line(char *flash_q)
+void blink_line(char *flash_q)
 {
 	char *qp = flash_q;
 	
@@ -474,19 +398,17 @@ int blink_line(char *flash_q)
 		qp++;
 	}
 	endPaint();
-
-	return 0;
 }
 
 
-int putview(int x0,int y0,int x1,int y1)
+void putview(void)
 {
 	char str[16];
 
 	beginPaint();
 
-	for(int i = y0;i <= y1;i++){
-		for(int j = x0;j <= x1;j++){
+	for(int i = 0;i <= VIEW_Y1;i++){
+		for(int j = 0;j <= VIEW_X1;j++){
 			putblock(LEFT,0,j,i,view_table[i][j]);
 		}
 	}
@@ -496,55 +418,33 @@ int putview(int x0,int y0,int x1,int y1)
 	setTextSize(30);
 	sprintf_s(str,16,"Score:%d",score);
 	paintText(70, 200, str);
-	sprintf_s(str,16,"Level:%d",sum_line/10);
+	sprintf_s(str,16,"Level:%d",level);
 	paintText(70, 230, str);
 
 	endPaint();
-
-	return 0;
 }
 
-int cwfunc(void)
+void rotfunc(int mode)
 {
 	char rot_table[TMP_W][TMP_W];
 	
 	for(int i = 0;i < TMP_W;i++){
 		for(int j = 0;j < TMP_W;j++){
-			rot_table[i][j] = tmp_table[4-j][i];
+			if(mode == 0)		rot_table[i][j] = tmp_table[4-j][i];//cw
+			else if(mode == 1)	rot_table[i][j] = tmp_table[j][4-i];
 		}
 	}
 
 	if(blankscan(x,y,rot_table) == 0){
 		copymodule(rot_table,tmp_table);
-		game2vram(0,0,VIEW_X1,VIEW_Y1);
+		game2vram();
 		vram2module(x,y,tmp_table);
 		vram2target(x,y,tmp_table,tar_en);
-		putview(0,0,VIEW_X1,VIEW_Y1);
+		putview();
 	}
-	return 0;
 }
 
-int ccwfunc(void)
-{
-	char rot_table[TMP_W][TMP_W];
-	
-	for(int i = 0;i < TMP_W;i++){
-		for(int j = 0;j < TMP_W;j++){
-			rot_table[i][j] = tmp_table[j][4-i];
-		}
-	}
-
-	if(blankscan(x,y,rot_table) == 0){
-		copymodule(rot_table,tmp_table);
-		game2vram(0,0,VIEW_X1,VIEW_Y1);
-		vram2module(x,y,tmp_table);
-		vram2target(x,y,tmp_table,tar_en);
-		putview(0,0,VIEW_X1,VIEW_Y1);
-	}
-	return 0;
-}
-
-int vram2module(int x,int y,char tmp_table[][TMP_W])
+void vram2module(int x,int y,char tmp_table[][TMP_W])
 {
 	for(int i = 0;i < TMP_W;i++){
 		for(int j = 0;j < TMP_W;j++){
@@ -553,10 +453,9 @@ int vram2module(int x,int y,char tmp_table[][TMP_W])
 			}
 		}
 	}
-	return 0;
 }
 
-int vram2target(int x,int y,char tmp_table[][TMP_W],int tar_en)
+void vram2target(int x,int y,char tmp_table[][TMP_W],int tar_en)
 {
 	int x_tar,y_tar;
 	
@@ -574,22 +473,18 @@ int vram2target(int x,int y,char tmp_table[][TMP_W],int tar_en)
 			}
 		}
 	}
-	
-	return 0;
 }
 
-int game2vram(int x0,int y0,int x1,int y1)
+void game2vram(void)
 {
-	for(int i = y0;i <= y1;i++){
-		for(int j = x0;j <= x1;j++){
+	for(int i = 0;i <= VIEW_Y1;i++){
+		for(int j = 0;j <= VIEW_X1;j++){
 			view_table[i][j] = game_table[i][j];
 		}
 	}
-
-	return 0;
 }
 
-int res_game(void)
+void res_game(void)
 {
 	for(int j = 0;j <= VIEW_X1;j++){
 		if(TOPWALL >> j & 0x01){
@@ -613,8 +508,6 @@ int res_game(void)
 		}
 		else	game_table[GAME_Y1+1][j] = 0;
 	}
-
-	return 0;
 }
 
 int movefunc(int delta_x,int delta_y,char tmp_table[][TMP_W])
@@ -627,10 +520,10 @@ int movefunc(int delta_x,int delta_y,char tmp_table[][TMP_W])
 		x+=delta_x;
 		y+=delta_y;
 		
-		game2vram(0,0,VIEW_X1,VIEW_Y1);//reset vram
+		game2vram();//reset vram
 		vram2module(x,y,tmp_table);
 		vram2target(x,y,tmp_table,tar_en);
-		putview(0,0,VIEW_X1,VIEW_Y1);
+		putview();
 	}
 	else if(delta_x == 0){
 		putmodule(x,y,tmp_table);
@@ -652,10 +545,10 @@ int dropfunc(void)
 			score++;
 		}
 	}
-	game2vram(0,0,VIEW_X1,VIEW_Y1);
+	game2vram();
 	vram2module(x,y,tmp_table);
 	putmodule(x,y,tmp_table);
-	putview(0,0,VIEW_X1,VIEW_Y1);
+	putview();
 
 	if(hold_status == 3) hold_status = 2;
 
@@ -669,4 +562,93 @@ void CloseEvent(void)//(int result)
 
 	free(view_table_base);
 	free(view_table);
+}
+
+void gameconfig(int key)
+{
+	if(key >= '0' && key <= '9'){
+			level = key - '0';
+		}
+		else if(key == 'P'){
+			status = PLAY_STATUS;
+			randmodule(tmp_table,1);
+			//reset x and y data
+			x = 5;
+			y = 0;
+			score = 0;
+			sum_line = 0;
+			hold_status = 0;
+				
+			div_n = 40 - level;
+
+			ext_putmodule(180,0,blank_table,"Hold Block");
+			res_game();
+			game2vram();//reset vram
+			vram2module(x,y,tmp_table);
+			vram2target(x,y,tmp_table,tar_en);
+			putview();
+		}
+
+}
+void flashfunc(char *flash_q)
+{
+	char *qp = flash_q;
+	
+	switch(line_n){
+		case 1:
+			score += 40;
+			break;
+		case 2:
+			score += 100;
+			break;
+		case 3:
+			score += 300;
+			break;
+		case 4:
+			score += 1200;
+			break;
+		default:
+			break;
+	}
+		
+	sum_line += line_n;
+	if(line_n != 0 && sum_line % 10 == 0){
+		level++; 
+		if(div_n > 10)		div_n = 40 - level;
+	}
+	line_n = 0;
+
+	while(*qp != 0){
+		for(int j = GAME_X0;j <= GAME_X1;j++){
+			for(int i = *qp;i > GAME_Y0;i--){
+				game_table[i][j] = game_table[i-1][j];
+			}
+			game_table[2][j] = 0;
+		}
+		qp++;
+	}
+
+	putview();
+
+	randmodule(tmp_table,0);
+	//reset x and y data
+	x = 5;
+	y = 0;
+	if(blankscan(x,y,tmp_table) == 1)	status = GAMEOVER_STATUS; 
+	else								status = PLAY_STATUS;
+}
+
+void holdfunc(void)
+{
+	if(hold_status == 0){
+	//swap
+		copymodule(tmp_table,hold_table);
+		randmodule(tmp_table,0);
+		hold_status = 2;
+	}
+	else if(hold_status == 2 && blankscan(x,y,hold_table) == 0){
+		swapmodule(tmp_table,hold_table);
+		hold_status = 3;
+	}
+	ext_putmodule(180,0,hold_table,"Hold Block");
 }
