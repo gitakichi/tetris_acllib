@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <windows.h>
 #include "acllib.h"
 
 #define WIDTH		840
@@ -83,8 +82,8 @@ void KeyboardEvent(int key, int event)
 			else if(key == 38){//up
 				dropfunc();
 				line_n = find_line(flash_q);
-				if(line_n == 0)	flashfunc(flash_q);
-				else			blink_line(flash_q);
+				if(line_n == 0)	status = FLASH_STATUS;
+				else			status = BLINK_STATUS;
 			}
 			else if(key == 113)	closeWindow();//F2
 			else if(key == 'H'){//while flash dont use hold		
@@ -130,16 +129,38 @@ void KeyboardEvent(int key, int event)
 
 void timerEvent(int id)
 {
-	if(div_n <= div_i){
-		if(status == PLAY_STATUS){//continue game
-			if(movefunc(0,1,tmp_table) == 1){//detect ground		
-				line_n = find_line(flash_q);
-				if(line_n == 0)	flashfunc(flash_q);
-				else			blink_line(flash_q);
-			}
+	static int i = 0;
+
+	if(status == BLINK_STATUS){
+		if(i == 0){
+			blink_line(flash_q);
+			i++;
+		}
+		else if(i == 20){
+			status = FLASH_STATUS;
+			i = 0;
+		}
+		else i++;
+	}
+	if(status == FLASH_STATUS){
+		if(i == 0){
+			flashfunc(flash_q);
+			i++;
+		}
+		else if(i == 50){
+			status = PLAY_STATUS;
+			i = 0;
+		}
+		else i++;
+	}
+	if(div_n <= div_i && status == PLAY_STATUS){//continue game
+		if(movefunc(0,1,tmp_table) == 1){//detect ground		
+			line_n = find_line(flash_q);
+			if(line_n == 0)	status = FLASH_STATUS;
+			else			status = BLINK_STATUS;
 		}
 		div_i = 0;
-	}
+	}	
 	else	div_i++;
 }
 
@@ -387,9 +408,6 @@ void blink_line(char *flash_q)
 		qp++;
 	}
 	putview();
-
-	//Sleep(500);
-	flashfunc(flash_q);
 }
 
 
@@ -626,7 +644,6 @@ void flashfunc(char *flash_q)
 	if(blankscan(x,y,tmp_table) == 1){
 		gameover_func();
 	}
-	Sleep(500);
 	div_i = div_n;
 }
 
