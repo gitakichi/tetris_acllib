@@ -21,6 +21,7 @@
 #define PAUSE_STATUS		4
 #define GAMEOVER_STATUS		5
 #define WAIT_STATUS			6
+#define FLOATING_STATUS		7
 
 #define TOPWALL				0x1C0E
 #define SIDEWALL			0x1002
@@ -52,6 +53,7 @@ void gameconfig(int key);
 void flashfunc(char *flash_q);
 void holdfunc(void);
 void gameover_func(void);
+void acl_printf(int x,int y,char *str1);
 
 unsigned char table[7][TMP_W]={
 		{0x00,0x08,0x0E,0x00,0x00},
@@ -101,33 +103,18 @@ void KeyboardEvent(int key, int event)
 
 	if(event == KEY_UP)	used = 0;
 	else if(event == KEY_DOWN && used == 0){
-		if(status == PLAY_STATUS){
+		if(status == PLAY_STATUS || status == FLOATING_STATUS){
 			if(key == 39)		movefunc(1,0,tmp_table);//right
 			else if(key == 37)	movefunc(-1,0,tmp_table);//left	
 			else if(key == 40)	movefunc(0,1,tmp_table);//down
 			else if(key == 'S')	rotfunc(0);//cw
 			else if(key == 'A')	rotfunc(1);//ccw
-			else if(key == 38){//up
-				dropfunc();
-				line_n = find_line(flash_q);
-				if(line_n == 0)	status = FLASH_STATUS;
-				else			status = BLINK_STATUS;
-			}
+			else if(key == 38)	dropfunc();//up
 			else if(key == 113)	closeWindow();//F2
-			else if(key == 'H'){//while flash dont use hold		
-				holdfunc();
-			}
+			else if(key == 'H')	holdfunc();//while flash dont use hold		
 			else if(key == 27){
 				status = PAUSE_STATUS;//pause
-				
-				beginPaint();
-				setTextColor(BLACK);
-				setTextBkColor(WHITE);
-				setTextSize(30);
-				paintText(LEFT+70, 200, "Press ESC Start");
-				paintText(LEFT+70, 230, "Press E Exit");
-				endPaint();
-				
+				acl_printf(LEFT+70,200,"Press ESC Start\nPress E Exit");
 			}
 			else if(key == 112)	tar_en = tar_en ^ 0x01;//F1
 		}
@@ -184,11 +171,21 @@ void timerEvent(int id)
 		}
 		else i++;
 	}
-	else if(div_n <= div_i && status == PLAY_STATUS){//continue game
-		if(movefunc(0,1,tmp_table) == 1){//detect ground		
+	else if(status == FLOATING_STATUS){
+		if(i == 50){
+			i = 0;
+			putmodule(x,y,tmp_table);
+			if(hold_status == 3) hold_status = 2;
+			
 			line_n = find_line(flash_q);
 			if(line_n == 0)	status = FLASH_STATUS;
 			else			status = BLINK_STATUS;
+		}
+		else i++;
+	}
+	else if(div_n <= div_i && status == PLAY_STATUS){//continue game
+		if(movefunc(0,1,tmp_table) == 1){//detect ground		
+			status = FLOATING_STATUS;
 		}
 		div_i = 0;
 	}	
@@ -215,20 +212,9 @@ int Setup(void)
 	startTimer(timerID, 10);//TBD
 	registerCloseEvent(CloseEvent);
 	//initConsole ();
-	
-	beginPaint();
-	setTextColor(BLACK);
-	setTextBkColor(WHITE);
-	setTextSize(20);
-	paintText(0, 0, "Turn CW:S");
-	paintText(0, 20, "Turn CCW:A");
-	paintText(0, 40, "Pause:Esc");
-	paintText(0, 60, "Play:P");
-	paintText(0, 80, "Drop:Up");
-	paintText(0, 100, "Toggle Target:F1");
-	paintText(0, 120, "Hold:H");
-	paintText(0, 140, "Exit:F2");
-	endPaint();
+
+	//acl_printf(0,300,"ACLLIB\nTETRIS");
+	acl_printf(0,0,"Turn CW:S\nTurn CCW:A\nPause:Esc\nPlay:P\nDrop:Up\nToggle Target:F1\nHold:H\nExit:F2");
 	
 	res_game();
 	game2vram();
@@ -312,18 +298,14 @@ void putmodule(int x,int y,char mod[][TMP_W])
 
 void ext_putmodule(int x,int y,char mod[][TMP_W],char *str)
 {
-	beginPaint();
-	setTextColor(BLACK);
-	setTextBkColor(WHITE);
-	setTextSize(20);
-	paintText(x, y+100, str);
+	acl_printf(x,y+100,str);
 	
+	beginPaint();
 	for(int i = 0;i < TMP_W;i++){
 		for(int j = 0;j < TMP_W;j++){
 			putblock(x,y,j,i,mod[i][j]);
 		}
 	}
-
 	endPaint();
 }
 
@@ -445,7 +427,7 @@ void blink_line(char *flash_q)
 
 void putview(void)
 {
-	char str[32];
+	char str[64];
 
 	beginPaint();
 	for(int i = 0;i <= VIEW_Y1;i++){
@@ -453,38 +435,36 @@ void putview(void)
 			putblock(LEFT,0,j,i,view_table[i][j]);
 		}
 	}
-	
-	setTextColor(BLACK);
-	setTextBkColor(WHITE);
-	setTextSize(30);
-	sprintf_s(str,32,"Score: %d     ",score);
-	paintText(70, 200, str);
-	sprintf_s(str,32,"Level: %d     ",level);
-	paintText(70, 230, str);
-	
+	setPenWidth(2);
+	setBrushColor(WHITE);
+	setPenColor(WHITE);
+	rectangle(LEFT-120,200,LEFT,240);
 	endPaint();
+
+	sprintf_s(str,64,"Score: %d     \nLevel: %d     ",score,level);
+	acl_printf(LEFT-120,200,str);
+
 }
 
 void ext_putview(void)
 {
-	char str[32];
+	char str[64];
 
 	beginPaint();
 	for(int i = GAME_Y0;i <= GAME_Y1;i++){
 		for(int j = GAME_X0;j <= GAME_X1;j++){
-			putblock(LEFT,0,j,i,view_table[i][j]);
+			putblock(LEFT-100,0,j,i,view_table[i][j]);
 		}
 	}
-
-	setTextColor(BLACK);
-	setTextBkColor(WHITE);
-	setTextSize(30);
-	sprintf_s(str,32,"Score: %d     ",score);
-	paintText(70, 200, str);
-	sprintf_s(str,32,"Level: %d     ",level);
-	paintText(70, 230, str);
-	
+	setPenWidth(2);
+	setBrushColor(WHITE);
+	setPenColor(WHITE);
+	rectangle(LEFT-120,200,LEFT,240);
 	endPaint();
+
+	sprintf_s(str,64,"Score: %d     \nLevel: %d     ",score,level);
+	acl_printf(LEFT-120,200,str);
+
 }
 
 void rotfunc(int mode)
@@ -574,6 +554,12 @@ int movefunc(int delta_x,int delta_y,char tmp_table[][TMP_W])
 	int result = blankscan(x+delta_x,y+delta_y,tmp_table);
 
 	if(result == 0){
+		if(status == FLOATING_STATUS){
+			if(blankscan(x+delta_x,y+1,tmp_table) == 0){
+				y++;
+			}
+		}
+		
 		x+=delta_x;
 		y+=delta_y;
 		
@@ -582,11 +568,6 @@ int movefunc(int delta_x,int delta_y,char tmp_table[][TMP_W])
 		vram2target(x,y,tmp_table,tar_en);
 		putview();
 	}
-	else if(delta_x == 0){
-		putmodule(x,y,tmp_table);
-		if(hold_status == 3) hold_status = 2;
-	}
-
 	return result;
 }
 
@@ -602,12 +583,13 @@ void dropfunc(void)
 			score++;
 		}
 	}
+	status = FLOATING_STATUS;
 	game2vram();
 	vram2module(x,y,tmp_table);
-	putmodule(x,y,tmp_table);
+	//putmodule(x,y,tmp_table);
 	putview();
 
-	if(hold_status == 3) hold_status = 2;
+	//if(hold_status == 3) hold_status = 2;
 }
 
 void CloseEvent(void)
@@ -621,19 +603,13 @@ void CloseEvent(void)
 
 void gameconfig(int key)
 {
-	char str[][16]={"Level 0","Level 1","Level 2","Level 3","Level 4",
-					"Level 5","Level 6","Level 7","Level 8","Level 9",};
+	char str[64];
 	
 	if(key >= '0' && key <= '9'){
 			level = key - '0';
 			
-			beginPaint();
-			setTextColor(BLACK);
-			setTextBkColor(WHITE);
-			setTextSize(30);
-			paintText(LEFT+70, 300, str[key - '0']);
-			paintText(LEFT+70, 330, "Press P Start");
-			endPaint();
+			sprintf_s(str,64,"Level %d\nPress P Start",level);
+			acl_printf(LEFT+70,300,str);
 			
 		}
 	else if(key == 'P'){
@@ -648,8 +624,7 @@ void gameconfig(int key)
 				
 		div_n = 40 - level;
 
-		char str[16] = "Hold Block";
-		ext_putmodule(180,0,hold_table,str);
+		ext_putmodule(180,0,blank_table,"Hold Block");
 		res_game();
 		game2vram();//reset vram
 		vram2module(x,y,tmp_table);
@@ -733,21 +708,42 @@ void holdfunc(void)
 		swapmodule(tmp_table,hold_table);
 		hold_status = 3;
 	}
-	char str[16] = "Hold Block";
-	ext_putmodule(180,0,hold_table,str);
+	ext_putmodule(180,0,hold_table,"Hold Block");
 }
 
 void gameover_func(void)
 {
 	putview();
 	
-	beginPaint();
-	setTextColor(BLACK);
-	setTextBkColor(WHITE);
-	setTextSize(30);
-	paintText(LEFT+70, 200, "GAME OVER");
-	endPaint();
+	acl_printf(LEFT+70,200,"GAME OVER");
 	
 	status = GAMEOVER_STATUS; 
 	gameconfig('0');
+}
+
+void acl_printf(int x,int y,char *str1)
+{
+	int i = 0;
+	char *p1 = str1;
+	char str2[32];
+	char *p2;
+
+	beginPaint();
+	setTextColor(BLACK);
+	setTextBkColor(WHITE);
+	setTextSize(20);
+
+	while(*p1 != '\0'){
+		p2 = str2;
+		while(*p1 != '\0' && *p1 != '\n'){
+			*p2 = *p1;
+			p1++;
+			p2++;
+		}
+		if(*p1 == '\n')	p1++;
+		*p2 = '\0';
+		paintText(x, y+(i*20), str2);
+		i++;
+	}
+	endPaint();
 }
