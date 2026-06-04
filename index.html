@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tetris Browser</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="panel game-panel">
+        <div class="title-row">
+          <div>
+            <p class="eyebrow">Browser Tetris</p>
+            <h1>テトリス</h1>
+          </div>
+          <button id="restartBtn" class="ghost-btn" type="button">Restart</button>
+        </div>
+
+        <div class="board-area">
+          <canvas id="board" width="300" height="600" aria-label="Tetris game board"></canvas>
+        </div>
+      </section>
+
+      <aside class="panel side-panel">
+        <div class="stat-card">
+          <h2>Score</h2>
+          <p id="score" class="stat-value">0</p>
+        </div>
+
+        <div class="stat-card">
+          <h2>Next</h2>
+          <canvas id="next" width="120" height="120" aria-label="Next piece preview"></canvas>
+        </div>
+
+        <div class="stat-card">
+          <h2>Controls</h2>
+          <ul class="controls-list">
+            <li>← / → : Move</li>
+            <li>↓ : Soft drop</li>
+            <li>↑ : Rotate</li>
+            <li>Space : Hard drop</li>
+            <li>P : Pause / Resume</li>
+            <li>R : Restart</li>
+          </ul>
+        </div>
+
+        <div class="status-card">
+          <p id="statusText">Press R to start.</p>
+        </div>
+      </aside>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
