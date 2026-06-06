@@ -1,6 +1,6 @@
 const COLS = 10;
 const ROWS = 20;
-const BLOCK = 30;
+const BLOCK = 21;
 const EMPTY = 0;
 
 const COLORS = {
@@ -26,16 +26,25 @@ const SHAPES = [
 
 const boardCanvas = document.getElementById('board');
 const nextCanvas = document.getElementById('next');
+const next2Canvas = document.getElementById('next2');
+const holdCanvas = document.getElementById('hold');
 const scoreEl = document.getElementById('score');
 const statusEl = document.getElementById('statusText');
 const restartBtn = document.getElementById('restartBtn');
 
 const boardCtx = boardCanvas.getContext('2d');
 const nextCtx = nextCanvas.getContext('2d');
+const next2Ctx = next2Canvas.getContext('2d');
+const holdCtx = holdCanvas.getContext('2d');
 
 let board = createMatrix();
 let currentPiece = null;
-let nextPiece = null;
+let queue = [];
+let holdPiece = null;
+let targetEnabled = true;
+let lineClearRows = [];
+let lineClearBlink = false;
+let lineClearTimer = null;
 let dropInterval = 700;
 let score = 0;
 let gameOver = false;
@@ -55,9 +64,27 @@ function randomPiece() {
   };
 }
 
+function clonePiece(piece) {
+  return {
+    name: piece.name,
+    color: piece.color,
+    matrix: piece.matrix.map(row => [...row])
+  };
+}
+
+function ensureQueue() {
+  while (queue.length < 3) queue.push(randomPiece());
+}
+
+function nextFromQueue() {
+  ensureQueue();
+  const piece = queue.shift();
+  queue.push(randomPiece());
+  return clonePiece(piece);
+}
+
 function spawnPiece() {
-  currentPiece = nextPiece || randomPiece();
-  nextPiece = randomPiece();
+  currentPiece = nextFromQueue();
   const startX = Math.floor((COLS - currentPiece.matrix[0].length) / 2);
   const startY = 0;
 
@@ -111,21 +138,27 @@ function mergePiece() {
   });
 }
 
-function clearLines() {
-  let lines = 0;
+function findFullRows() {
+  return board
+    .map((row, index) => (row.every(cell => cell !== EMPTY) ? index : -1))
+    .filter(index => index >= 0);
+}
+
+function clearLines(rows) {
+  if (!rows.length) return 0;
+
+  const cleared = [...rows];
   for (let r = ROWS - 1; r >= 0; r--) {
-    if (board[r].every(cell => cell !== EMPTY)) {
+    if (cleared.includes(r)) {
       board.splice(r, 1);
       board.unshift(Array(COLS).fill(EMPTY));
-      lines += 1;
-      r += 1;
     }
   }
 
-  if (lines > 0) {
-    score += [0, 100, 300, 500, 800][lines] * 1;
-    updateScore();
-  }
+  const linePoints = [0, 100, 300, 500, 800];
+  score += linePoints[cleared.length] || 0;
+  updateScore();
+  return cleared.length;
 }
 
 function hardDrop() {
@@ -135,13 +168,67 @@ function hardDrop() {
   lockPiece();
 }
 
-function lockPiece() {
-  mergePiece();
-  clearLines();
+function holdCurrentPiece() {
+  if (!currentPiece || gameOver || paused) return;
+
+  if (!holdPiece) {
+    holdPiece = clonePiece(currentPiece);
+    piece = spawnPiece();
+  } else {
+    const swapped = clonePiece(currentPiece);
+    currentPiece = clonePiece(holdPiece);
+    holdPiece = swapped;
+    piece = {
+      x: Math.floor((COLS - currentPiece.matrix[0].length) / 2),
+      y: 0
+    };
+    if (!isValidMove(currentPiece, piece.x, piece.y, board)) {
+      gameOver = true;
+      updateStatus('Game Over — Press R to restart');
+      stopLoop();
+      return;
+    }
+  }
+
+  draw();
+}
+
+function finalizeLock() {
   piece = spawnPiece();
   if (gameOver) return;
   updateStatus('Playing');
   draw();
+}
+
+function startLineClearEffect(rows) {
+  lineClearRows = rows;
+  lineClearBlink = true;
+  updateStatus('Line clear!');
+  draw();
+
+  if (lineClearTimer) clearInterval(lineClearTimer);
+  lineClearTimer = window.setInterval(() => {
+    lineClearBlink = !lineClearBlink;
+    draw();
+  }, 160);
+
+  window.setTimeout(() => {
+    if (lineClearTimer) clearInterval(lineClearTimer);
+    lineClearTimer = null;
+    clearLines(rows);
+    lineClearRows = [];
+    finalizeLock();
+  }, 320);
+}
+
+function lockPiece() {
+  mergePiece();
+  const rows = findFullRows();
+  if (rows.length > 0) {
+    startLineClearEffect(rows);
+    return;
+  }
+  finalizeLock();
 }
 
 function movePiece(dx, dy) {
@@ -192,34 +279,68 @@ function drawCell(ctx, x, y, color, outline = true) {
   }
 }
 
+function getGhostY() {
+  if (!currentPiece) return piece.y;
+  let ghostY = piece.y;
+  while (isValidMove(currentPiece, piece.x, ghostY + 1, board)) {
+    ghostY += 1;
+  }
+  return ghostY;
+}
+
 function drawBoard() {
   boardCtx.clearRect(0, 0, boardCanvas.width, boardCanvas.height);
   for (let y = 0; y < ROWS; y++) {
     for (let x = 0; x < COLS; x++) {
-      drawCell(boardCtx, x, y, COLORS[board[y][x]] || COLORS[0]);
+      const isClearing = lineClearRows.includes(y) && lineClearBlink;
+      const color = isClearing ? COLORS[0] : COLORS[board[y][x]] || COLORS[0];
+      drawCell(boardCtx, x, y, color);
     }
+  }
+
+  if (currentPiece && targetEnabled) {
+    const ghostY = getGhostY();
+    currentPiece.matrix.forEach((row, r) => {
+      row.forEach((value, c) => {
+        if (value) drawCell(boardCtx, piece.x + c, ghostY + r, 'rgba(148, 163, 184, 0.28)', false);
+      });
+    });
   }
 
   if (currentPiece) {
     currentPiece.matrix.forEach((row, r) => {
       row.forEach((value, c) => {
-        if (value) drawCell(boardCtx, piece.x + c, piece.y + r, COLORS[currentPiece.color], true);
+        const y = piece.y + r;
+        const x = piece.x + c;
+        if (!value) return;
+        if (lineClearRows.includes(y)) {
+          if (lineClearBlink) return;
+        }
+        drawCell(boardCtx, x, y, COLORS[currentPiece.color], true);
       });
     });
   }
 }
 
-function drawNext() {
-  nextCtx.clearRect(0, 0, nextCanvas.width, nextCanvas.height);
-  const preview = nextPiece || randomPiece();
-  const matrix = preview.matrix;
+function drawPreview(ctx, canvas, piece) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (!piece) return;
+  const matrix = piece.matrix;
   const offsetX = Math.floor((4 - matrix[0].length) / 2);
   const offsetY = Math.floor((4 - matrix.length) / 2);
   matrix.forEach((row, r) => {
     row.forEach((value, c) => {
-      if (value) drawCell(nextCtx, offsetX + c, offsetY + r, COLORS[preview.color], true);
+      if (value) drawCell(ctx, offsetX + c, offsetY + r, COLORS[piece.color], true);
     });
   });
+}
+
+function drawNext() {
+  const preview1 = queue[0] || randomPiece();
+  const preview2 = queue[1] || randomPiece();
+  drawPreview(nextCtx, nextCanvas, preview1);
+  drawPreview(next2Ctx, next2Canvas, preview2);
+  drawPreview(holdCtx, holdCanvas, holdPiece);
 }
 
 function draw() {
@@ -232,15 +353,24 @@ function resetGame() {
   score = 0;
   gameOver = false;
   paused = false;
+  holdPiece = null;
+  queue = [];
   updateScore();
   updateStatus('Playing');
-  nextPiece = randomPiece();
+  ensureQueue();
   piece = spawnPiece();
   draw();
   startLoop();
 }
 
 window.addEventListener('keydown', (event) => {
+  const isArrowKey = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key);
+  const isSpace = event.key === ' ';
+
+  if (isArrowKey || isSpace) {
+    event.preventDefault();
+  }
+
   if (event.key === 'p' || event.key === 'P') {
     paused = !paused;
     updateStatus(paused ? 'Paused — Press P to resume' : 'Playing');
@@ -255,6 +385,16 @@ window.addEventListener('keydown', (event) => {
   if (gameOver || paused) return;
 
   switch (event.key) {
+    case 'f':
+    case 'F':
+      targetEnabled = !targetEnabled;
+      updateStatus(targetEnabled ? 'Target preview: ON' : 'Target preview: OFF');
+      draw();
+      break;
+    case 'h':
+    case 'H':
+      holdCurrentPiece();
+      break;
     case 'ArrowLeft':
       movePiece(-1, 0);
       break;
@@ -269,7 +409,6 @@ window.addEventListener('keydown', (event) => {
       draw();
       break;
     case ' ':
-      event.preventDefault();
       hardDrop();
       draw();
       break;
