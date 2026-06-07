@@ -29,8 +29,10 @@ const nextCanvas = document.getElementById('next');
 const next2Canvas = document.getElementById('next2');
 const holdCanvas = document.getElementById('hold');
 const scoreEl = document.getElementById('score');
+const levelEl = document.getElementById('level');
 const statusEl = document.getElementById('statusText');
 const restartBtn = document.getElementById('restartBtn');
+const pauseBtn = document.getElementById('pauseBtn');
 
 const boardCtx = boardCanvas.getContext('2d');
 const nextCtx = nextCanvas.getContext('2d');
@@ -45,8 +47,10 @@ let targetEnabled = true;
 let lineClearRows = [];
 let lineClearBlink = false;
 let lineClearTimer = null;
-let dropInterval = 700;
 let score = 0;
+let level = 1;
+let linesCleared = 0;
+let holdUsed = false;
 let gameOver = false;
 let paused = false;
 let timer = null;
@@ -81,6 +85,10 @@ function nextFromQueue() {
   const piece = queue.shift();
   queue.push(randomPiece());
   return clonePiece(piece);
+}
+
+function getDropInterval() {
+  return Math.max(120, 700 - (level - 1) * 60);
 }
 
 function spawnPiece() {
@@ -156,7 +164,10 @@ function clearLines(rows) {
 
   const linePoints = [0, 100, 300, 500, 800];
   score += linePoints[cleared.length] || 0;
+  linesCleared += cleared.length;
+  level = 1 + Math.floor(linesCleared / 10);
   updateScore();
+  updateLevel();
   return cleared.length;
 }
 
@@ -168,19 +179,21 @@ function hardDrop() {
 }
 
 function holdCurrentPiece() {
-  if (!currentPiece || gameOver || paused) return;
+  if (!currentPiece || gameOver || paused || holdUsed) return;
 
   if (!holdPiece) {
     holdPiece = clonePiece(currentPiece);
     piece = spawnPiece();
+    holdUsed = false;
   } else {
-    const swapped = clonePiece(currentPiece);
+    const current = clonePiece(currentPiece);
     currentPiece = clonePiece(holdPiece);
-    holdPiece = swapped;
+    holdPiece = current;
     piece = {
       x: Math.floor((COLS - currentPiece.matrix[0].length) / 2),
       y: 0
     };
+    holdUsed = true;
     if (!isValidMove(currentPiece, piece.x, piece.y, board)) {
       gameOver = true;
       updateStatus('Game Over — Press R to restart');
@@ -195,8 +208,10 @@ function holdCurrentPiece() {
 function finalizeLock() {
   piece = spawnPiece();
   if (gameOver) return;
+  holdUsed = false;
   updateStatus('Playing');
   draw();
+  startLoop();
 }
 
 function startLineClearEffect(rows) {
@@ -252,7 +267,7 @@ function startLoop() {
   stopLoop();
   timer = window.setInterval(() => {
     if (!paused && !gameOver) movePiece(0, 1);
-  }, dropInterval);
+  }, getDropInterval());
 }
 
 function stopLoop() {
@@ -261,6 +276,10 @@ function stopLoop() {
 
 function updateScore() {
   scoreEl.textContent = String(score);
+}
+
+function updateLevel() {
+  if (levelEl) levelEl.textContent = String(level);
 }
 
 function updateStatus(text) {
@@ -350,11 +369,16 @@ function draw() {
 function resetGame() {
   board = createMatrix();
   score = 0;
+  level = 1;
+  linesCleared = 0;
+  holdUsed = false;
   gameOver = false;
   paused = false;
   holdPiece = null;
   queue = [];
   updateScore();
+  updateLevel();
+  if (pauseBtn) pauseBtn.textContent = 'Pause';
   updateStatus('Playing');
   ensureQueue();
   piece = spawnPiece();
@@ -371,8 +395,7 @@ window.addEventListener('keydown', (event) => {
   }
 
   if (event.key === 'p' || event.key === 'P') {
-    paused = !paused;
-    updateStatus(paused ? 'Paused — Press P to resume' : 'Playing');
+    togglePause();
     return;
   }
 
@@ -415,5 +438,46 @@ window.addEventListener('keydown', (event) => {
 });
 
 restartBtn.addEventListener('click', resetGame);
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch((error) => {
+      console.warn('Service Worker registration failed:', error);
+    });
+  });
+}
+
+function togglePause() {
+  paused = !paused;
+  updateStatus(paused ? 'Paused — Press P to resume' : 'Playing');
+  if (pauseBtn) pauseBtn.textContent = paused ? 'Resume' : 'Pause';
+}
+
+pauseBtn?.addEventListener('click', togglePause);
+
+function handleAction(action) {
+  if (gameOver || paused) return;
+
+  switch (action) {
+    case 'left':
+      movePiece(-1, 0);
+      break;
+    case 'right':
+      movePiece(1, 0);
+      break;
+    case 'rotate':
+      rotatePiece();
+      draw();
+      break;
+    case 'drop':
+      hardDrop();
+      draw();
+      break;
+  }
+}
+
+document.querySelectorAll('.touch-btn').forEach((button) => {
+  button.addEventListener('click', () => handleAction(button.dataset.action));
+});
 
 resetGame();

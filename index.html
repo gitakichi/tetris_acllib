@@ -3,6 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#07111f" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="manifest.json" />
     <title>Tetris Browser</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -14,11 +18,21 @@
             <p class="eyebrow">Browser Tetris</p>
             <h1>テトリス</h1>
           </div>
-          <button id="restartBtn" class="ghost-btn" type="button">Restart</button>
+          <div class="title-actions">
+            <button id="pauseBtn" class="ghost-btn" type="button">Pause</button>
+            <button id="restartBtn" class="ghost-btn" type="button">Restart</button>
+          </div>
         </div>
 
         <div class="board-area">
           <canvas id="board" width="210" height="420" aria-label="Tetris game board"></canvas>
+        </div>
+
+        <div class="mobile-controls" aria-label="Touch controls">
+          <button class="touch-btn" data-action="left" type="button" aria-label="Move left">◀</button>
+          <button class="touch-btn" data-action="rotate" type="button" aria-label="Rotate">↻</button>
+          <button class="touch-btn" data-action="drop" type="button" aria-label="Drop">⤓</button>
+          <button class="touch-btn" data-action="right" type="button" aria-label="Move right">▶</button>
         </div>
       </section>
 
@@ -26,6 +40,11 @@
         <div class="stat-card">
           <h2>Score</h2>
           <p id="score" class="stat-value">0</p>
+        </div>
+
+        <div class="stat-card">
+          <h2>Level</h2>
+          <p id="level" class="stat-value">1</p>
         </div>
 
         <div class="stat-card">
