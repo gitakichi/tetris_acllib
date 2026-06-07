@@ -145,15 +145,14 @@ function findFullRows() {
 }
 
 function clearLines(rows) {
-  if (!rows.length) return 0;
+  const cleared = rows.filter((rowIndex) => board[rowIndex] && board[rowIndex].every(cell => cell !== EMPTY));
+  if (!cleared.length) return 0;
 
-  const cleared = [...rows];
-  for (let r = ROWS - 1; r >= 0; r--) {
-    if (cleared.includes(r)) {
-      board.splice(r, 1);
-      board.unshift(Array(COLS).fill(EMPTY));
-    }
-  }
+  const remaining = board.filter((_, index) => !cleared.includes(index));
+  board = [
+    ...Array.from({ length: cleared.length }, () => Array(COLS).fill(EMPTY)),
+    ...remaining
+  ];
 
   const linePoints = [0, 100, 300, 500, 800];
   score += linePoints[cleared.length] || 0;
