@@ -1,6 +1,6 @@
 const COLS = 10;
 const ROWS = 20;
-const BLOCK = 21;
+const BLOCK = 31.5;
 const EMPTY = 0;
 
 const COLORS = {
@@ -286,14 +286,14 @@ function updateStatus(text) {
   statusEl.textContent = text;
 }
 
-function drawCell(ctx, x, y, color, outline = true) {
-  const px = x * BLOCK;
-  const py = y * BLOCK;
+function drawCell(ctx, x, y, color, outline = true, size = BLOCK) {
+  const px = x * size;
+  const py = y * size;
   ctx.fillStyle = color;
-  ctx.fillRect(px + 1, py + 1, BLOCK - 2, BLOCK - 2);
+  ctx.fillRect(px + 1, py + 1, size - 2, size - 2);
   if (outline) {
     ctx.strokeStyle = 'rgba(255,255,255,0.12)';
-    ctx.strokeRect(px + 1, py + 1, BLOCK - 2, BLOCK - 2);
+    ctx.strokeRect(px + 1, py + 1, size - 2, size - 2);
   }
 }
 
@@ -344,11 +344,12 @@ function drawPreview(ctx, canvas, piece) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   if (!piece) return;
   const matrix = piece.matrix;
-  const offsetX = Math.floor((4 - matrix[0].length) / 2);
-  const offsetY = Math.floor((4 - matrix.length) / 2);
+  const previewSize = Math.floor(Math.min(canvas.width / matrix[0].length, canvas.height / matrix.length));
+  const offsetX = Math.floor((canvas.width / previewSize - matrix[0].length) / 2);
+  const offsetY = Math.floor((canvas.height / previewSize - matrix.length) / 2);
   matrix.forEach((row, r) => {
     row.forEach((value, c) => {
-      if (value) drawCell(ctx, offsetX + c, offsetY + r, COLORS[piece.color], true);
+      if (value) drawCell(ctx, offsetX + c, offsetY + r, COLORS[piece.color], true, previewSize);
     });
   });
 }
